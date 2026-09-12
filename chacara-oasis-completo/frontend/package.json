@@ -1,5 +1,5 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "chacara-oasis-app",
   "private": true,
   "sideEffects": false,
   "type": "module",
@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "format": "prettier --write ."
   },
+  
   "overrides": {
     "rolldown": "1.2.1"
   },
