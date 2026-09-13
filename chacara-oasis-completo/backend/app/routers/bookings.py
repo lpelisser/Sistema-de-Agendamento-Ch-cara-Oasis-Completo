@@ -2,6 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import crud, schemas
+from app.auth import verify_admin_key
 from app.database import get_db
 from app.services.email_service import send_email_notification
 from app.utils import generate_whatsapp_link
@@ -27,6 +28,16 @@ def _email_data(booking) -> dict:
         "total_estimated_value": booking.total_estimated_value,
         "status": booking.status.value,
     }
+
+
+@router.get(
+    "",
+    response_model=list[schemas.BookingOut],
+    dependencies=[Depends(verify_admin_key)],
+)
+def list_bookings_admin(db: Session = Depends(get_db)):
+    """Lista todas as reservas (inclusive canceladas) para o painel do ADM."""
+    return crud.list_all_bookings_for_admin(db)
 
 
 @router.post("", response_model=schemas.BookingOut, status_code=201)
@@ -93,6 +104,7 @@ def get_booking(
 @router.patch(
     "/{booking_id}/status",
     response_model=schemas.BookingOut,
+    dependencies=[Depends(verify_admin_key)],
 )
 def update_status(
     booking_id: str,

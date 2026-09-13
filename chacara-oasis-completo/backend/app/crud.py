@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -76,17 +76,12 @@ def is_period_available(
     check_in: date,
     check_out: date,
     exclude_booking_id: Optional[str] = None,
-):
+) -> Tuple[bool, int, int]:
     conflicting_bookings = has_booking_conflict(
-        db,
-        check_in,
-        check_out,
-        exclude_booking_id,
+        db, check_in, check_out, exclude_booking_id
     )
     conflicting_blocks = has_blocked_date_conflict(
-        db,
-        check_in,
-        check_out,
+        db, check_in, check_out
     )
 
     return (
@@ -100,6 +95,12 @@ def create_booking(
     db: Session,
     booking_data: schemas.BookingCreate,
 ) -> models.Booking:
+    is_available, _, _ = is_period_available(
+        db, booking_data.check_in, booking_data.check_out
+    )
+    if not is_available:
+        raise ValueError("O período solicitado não está disponível.")
+
     customer = create_customer(db, booking_data.customer)
 
     booking = models.Booking(
@@ -115,17 +116,8 @@ def create_booking(
 
     db.add(booking)
     db.commit()
-    db.refresh(booking)
 
-    # Garante que customer esteja carregado antes da sessão ser fechada.
-    booking = (
-        db.query(models.Booking)
-        .options(joinedload(models.Booking.customer))
-        .filter(models.Booking.id == booking.id)
-        .first()
-    )
-
-    return booking
+    return get_booking(db, booking.id)
 
 
 def get_booking(
@@ -144,7 +136,7 @@ def list_bookings(
     db: Session,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-):
+) -> List[models.Booking]:
     query = (
         db.query(models.Booking)
         .options(joinedload(models.Booking.customer))
@@ -160,11 +152,23 @@ def list_bookings(
     return query.order_by(models.Booking.check_in).all()
 
 
+def list_all_bookings_for_admin(db: Session) -> List[models.Booking]:
+    """Lista todas as reservas, incluindo as canceladas, mais recentes primeiro.
+    Usado apenas pelo painel do ADM — list_bookings() acima esconde as
+    canceladas de propósito para o cálculo de disponibilidade do site."""
+    return (
+        db.query(models.Booking)
+        .options(joinedload(models.Booking.customer))
+        .order_by(models.Booking.created_at.desc())
+        .all()
+    )
+
+
 def update_booking_status(
     db: Session,
     booking_id: str,
     new_status: models.BookingStatus,
-):
+) -> Optional[models.Booking]:
     booking = get_booking(db, booking_id)
 
     if not booking:
@@ -174,13 +178,13 @@ def update_booking_status(
     db.commit()
     db.refresh(booking)
 
-    return get_booking(db, booking_id)
+    return booking
 
 
 def create_blocked_date(
     db: Session,
     block_data: schemas.BlockedDateCreate,
-):
+) -> models.BlockedDate:
     block = models.BlockedDate(**block_data.model_dump())
     db.add(block)
     db.commit()
@@ -192,14 +196,14 @@ def list_blocked_dates(
     db: Session,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-):
+) -> List[models.BlockedDate]:
     query = db.query(models.BlockedDate)
 
     if start_date:
-        query = query.filter(models.BlockedDate.end_date >= start_date)
+        query = query.filter(models.BlockedDate.end_date > start_date)
 
     if end_date:
-        query = query.filter(models.BlockedDate.start_date <= end_date)
+        query = query.filter(models.BlockedDate.start_date < end_date)
 
     return query.order_by(models.BlockedDate.start_date).all()
 
@@ -208,17 +212,9 @@ def get_daily_status(
     db: Session,
     start_date: date,
     end_date: date,
-):
-    bookings = list_bookings(
-        db,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    blocks = list_blocked_dates(
-        db,
-        start_date=start_date,
-        end_date=end_date,
-    )
+) -> List[Dict[str, Any]]:
+    bookings = list_bookings(db, start_date=start_date, end_date=end_date)
+    blocks = list_blocked_dates(db, start_date=start_date, end_date=end_date)
 
     result = []
     current = start_date

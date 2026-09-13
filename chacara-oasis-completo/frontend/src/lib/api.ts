@@ -21,6 +21,25 @@ export type BookingPayload = {
   notes?: string;
 };
 
+export type BookingStatus = "PENDENTE" | "CONFIRMADO" | "CANCELADO" | "CONCLUIDO";
+
+export type Booking = {
+  id: string;
+  customer: {
+    name: string;
+    email: string;
+    phone: string;
+    cpf: string;
+  };
+  check_in: string;
+  check_out: string;
+  guests_count: number;
+  event_type: "LAZER_FAMILIA" | "ANIVERSARIO" | "CASAMENTO" | "CORPORATIVO";
+  notes?: string | null;
+  status: BookingStatus;
+  created_at: string;
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -60,6 +79,24 @@ export function createBooking(payload: BookingPayload) {
 export function checkAvailability(startDate: string, endDate: string) {
   const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
   return request<{ available: boolean }>(`/api/availability?${params.toString()}`);
+}
+
+export function adminListBookings(adminKey: string) {
+  return request<Booking[]>("/api/bookings", {
+    headers: { "X-Admin-Key": adminKey },
+  });
+}
+
+export function adminUpdateBookingStatus(
+  bookingId: string,
+  status: BookingStatus,
+  adminKey: string,
+) {
+  return request<Booking>(`/api/bookings/${bookingId}/status`, {
+    method: "PATCH",
+    headers: { "X-Admin-Key": adminKey },
+    body: JSON.stringify({ status }),
+  });
 }
 
 export { API_URL };
