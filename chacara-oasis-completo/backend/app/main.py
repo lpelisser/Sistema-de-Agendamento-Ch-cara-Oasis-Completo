@@ -1,12 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import Base, engine
 from app import models
+from app.database import Base, engine
 from app.routers import availability, blocked_dates, bookings
 
 # Cria as tabelas automaticamente.
-# Para produção, recomenda-se usar Alembic/migrations.
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -18,7 +17,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://chacara-oasis-app.chacara-oasis.workers.dev",
+        "https://chacara-oasis.chacara-oasis.workers.dev",      # Corrigo aqui (sem o '-app')
+        "https://chacara-oasis-app.chacara-oasis.workers.dev",  # Mantido por precaução
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:8000",
